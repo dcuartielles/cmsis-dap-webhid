@@ -49,6 +49,8 @@ export class WebHIDTransport {
         // promise instead.
         this._received = [];
         this._waiting = [];
+        /** Replies dropped as belonging to a finished exchange. */
+        this.staleReports = 0;
 
         this._onReport = (event) => {
             const view = new DataView(
@@ -66,6 +68,13 @@ export class WebHIDTransport {
     async open() {
         if (!this.device.opened) await this.device.open();
         this.device.addEventListener('inputreport', this._onReport);
+        // A probe left mid-exchange by a previous session still has a reply
+        // queued, and the operating system delivers it the moment we listen.
+        // Read it as the answer to our first command and every later one is
+        // off by one, which surfaces as "bad response" errors that a reconnect
+        // mysteriously fixes.
+        this.staleReports = 0;
+        this._received = [];
     }
 
     async close() {
@@ -91,6 +100,14 @@ export class WebHIDTransport {
 
         const report = new Uint8Array(REPORT_SIZE);
         report.set(source.subarray(0, REPORT_SIZE));
+
+        // CMSIS-DAP is strictly one reply per command, so anything already
+        // waiting belongs to an exchange that is over. Dropping it here keeps
+        // a single lost reply from desynchronising every command after it.
+        if (this._received.length) {
+            this.staleReports += this._received.length;
+            this._received = [];
+        }
 
         // Report ID 0: the convention for CMSIS-DAP over HID, which does not
         // number its reports.
