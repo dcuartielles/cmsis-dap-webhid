@@ -192,12 +192,32 @@ await flash.verify(0x0, firmware);
 await target.reset();
 ```
 
+### Getting the algorithm
+
 **You supply the `.FLM`; none is bundled.** Vendor algorithms come with vendor
 licences — the Renesas RA4M1 one, for instance, is Apache-2.0 from ARM but
 carries a Renesas notice limiting use to Renesas parts. That is a field-of-use
-restriction the GPL cannot accommodate, so redistributing it here is not an
-option. Download the CMSIS pack for your chip and pull the `.FLM` out of it; a
-pack is an ordinary zip.
+restriction no free licence can pass on, so redistributing it here is not an
+option.
+
+What this library can do is save you the trip. `tools/fetch-flm.mjs` downloads
+the algorithm straight from the vendor's own CMSIS pack, so the file reaches
+you from them, under their terms:
+
+```bash
+node tools/fetch-flm.mjs --search renesas          # which packs exist
+node tools/fetch-flm.mjs --pack Renesas.RA_DFP     # what is inside one
+node tools/fetch-flm.mjs --pack Renesas.RA_DFP --match RA4M1_256K
+```
+
+A `.pack` is a zip, and HTTP range requests can read one without downloading
+it: that Renesas pack is 88 MB and the algorithm inside is 23 KB. Only the
+23 KB come down the wire, in about two seconds. The extracted file is checked
+against its CRC.
+
+It is a command-line tool rather than part of the web page for a dull reason:
+neither keil.com nor the vendor mirrors send CORS headers, so a browser cannot
+fetch a pack at all.
 
 `node tools/inspect-flm.mjs path/to/Device.FLM` prints what is inside one.
 

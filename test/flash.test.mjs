@@ -189,6 +189,41 @@ test('a range maps onto the sectors it actually touches', () => {
         [0, 2048], 'an unaligned start erases from the sector it falls in');
 });
 
+test('stepped sector sizes map correctly', () => {
+    // Real geometry, from the Keil STM32F4xx_1024 algorithm: sectors grow from
+    // 16 KB to 64 KB to 128 KB. A descriptor entry applies until the next
+    // begins, which is the case uniform flash like the RA4M1 never exercises.
+    const algorithm = fakeAlgorithm();
+    algorithm.device.address = 0x08000000;
+    algorithm.device.size = 1024 * 1024;
+    algorithm.device.sectors = [
+        { size: 16 * 1024, address: 0x00000 },
+        { size: 64 * 1024, address: 0x10000 },
+        { size: 128 * 1024, address: 0x20000 },
+    ];
+    const flash = new FlashProgrammer(fakeTarget(), algorithm, {
+        ramAddress: 0x20000000, ramSize: 0x20000,
+    });
+
+    assert.deepEqual(
+        flash.sectorsFor(0x08000000, 1).map(s => [s.address, s.size]),
+        [[0x08000000, 16 * 1024]], 'the first sector is a small one');
+
+    assert.deepEqual(
+        flash.sectorsFor(0x08010000, 1).map(s => [s.address, s.size]),
+        [[0x08010000, 64 * 1024]], 'the 64 KB band starts exactly here');
+
+    assert.deepEqual(
+        flash.sectorsFor(0x08030000, 1).map(s => [s.address, s.size]),
+        [[0x08020000, 128 * 1024]],
+        'an address inside a 128 KB sector erases from that sector start');
+
+    // A write crossing all three bands must erase whole sectors of each size.
+    assert.deepEqual(
+        flash.sectorsFor(0x08000000, 0x30000).map(s => s.size / 1024),
+        [16, 16, 16, 16, 64, 128]);
+});
+
 test('writing past the end of flash is refused', () => {
     const { flash } = programmer();
     assert.throws(
