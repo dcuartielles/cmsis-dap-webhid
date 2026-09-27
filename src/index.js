@@ -44,3 +44,13 @@ export {
     probeMemory,
     hex,
 } from './debug.js';
+
+export {
+    parseFLM,
+    ALGO_FUNCTIONS,
+} from './flm.js';
+
+export {
+    FlashProgrammer,
+    OPERATION,
+} from './flash.js';

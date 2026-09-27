@@ -42,6 +42,7 @@ const EM_ARM = 0x28;
 const SHT_PROGBITS = 1;
 const SHT_SYMTAB   = 2;
 const SHT_NOBITS   = 8;
+const SHF_WRITE    = 0x1;
 const SHF_ALLOC    = 0x2;
 
 /** The descriptor section, as named by the CMSIS template. */
@@ -146,11 +147,13 @@ function parseDeviceDescriptor(view, bytes, section) {
  *
  * @param {ArrayBuffer|Uint8Array} input  Contents of the .FLM file
  * @returns {{device: object, code: Uint8Array, codeAddress: number,
- *            zeroInitSize: number, symbols: object, entries: object}}
+ *            dataOffset: number, zeroInitSize: number,
+ *            symbols: object, entries: object}}
  *   `code` is the image to copy into target RAM, `codeAddress` the address it
  *   was linked at (almost always 0, so it relocates freely), `zeroInitSize`
- *   the extra zeroed bytes the algorithm expects after it, and `entries` the
- *   offset of each available function within `code`.
+ *   the extra zeroed bytes the algorithm expects after it, `dataOffset` where
+ *   its read-write data starts within `code`, and `entries` the offset of each
+ *   available function within `code`.
  */
 export function parseFLM(input) {
     const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
@@ -200,6 +203,13 @@ export function parseFLM(input) {
         .filter(s => s.type === SHT_NOBITS)
         .reduce((total, s) => total + s.size, 0);
 
+    // Algorithms are built read-write position independent: they reach their
+    // own variables through R9, which must point at the start of the data.
+    const firstWritable = progbits.find(s => s.flags & SHF_WRITE);
+    const dataOffset = firstWritable
+        ? firstWritable.addr - codeAddress
+        : code.length;
+
     const entries = {};
     for (const name of ALGO_FUNCTIONS) {
         // Thumb symbols carry bit 0 set; the real address is even.
@@ -209,5 +219,5 @@ export function parseFLM(input) {
         throw new Error('the algorithm is missing Init or ProgramPage');
     }
 
-    return { device, code, codeAddress, zeroInitSize, symbols, entries };
+    return { device, code, codeAddress, dataOffset, zeroInitSize, symbols, entries };
 }
