@@ -162,9 +162,15 @@ separate problem. `dapjs` offers `DAPLink` for probes that support it.
 
 ## Example
 
-`examples/debugger/` is a self-contained page: connect a probe, halt the core,
-step through instructions and dump memory. Serve it over HTTPS or `localhost`
-and open it in Chrome.
+**Try it now: <https://dcuartielles.github.io/cmsis-dap-webhid/examples/debugger/>**
+
+Open it in Chrome with a CMSIS-DAP board plugged in, click *Connect probe* and
+pick your device. Nothing is installed and nothing is uploaded: the page talks
+to the probe directly from your machine.
+
+The source is `examples/debugger/`, a self-contained page: connect a probe,
+halt the core, step through instructions and dump memory. To run it locally,
+serve it over HTTPS or `localhost` — WebHID refuses to work otherwise.
 
 ## Author
 
