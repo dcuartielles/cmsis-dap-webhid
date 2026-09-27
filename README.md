@@ -2,10 +2,69 @@
 
 Use **CMSIS-DAP** debug probes from a web page, over **WebHID**.
 
+Halt a running ARM Cortex-M, single-step it, read its registers and dump its
+memory — from a browser tab, with no toolchain and no drivers installed.
+
+![How the pieces connect](docs/architecture.svg)
+
+## What it's for
+
+A CMSIS-DAP probe is a small piece of hardware that speaks **SWD** to the debug
+port of an ARM chip. Many boards have one built in, so the debugger is already
+sitting on the desk. What has been missing is a way to reach it without
+installing anything: normally you need OpenOCD, pyOCD or a vendor IDE, each
+with its own toolchain, its own drivers and its own bad afternoon.
+
+This library removes that step. The browser becomes the debugger.
+
+That matters in a few concrete situations:
+
+- **Teaching.** Show a class what a program counter *is* by stepping one
+  instruction at a time and watching it move. Send a link, not an install
+  guide. No lab machine to prepare, no admin rights, nothing left behind.
+- **Diagnostics in the field.** A board misbehaves at a customer site. Open a
+  page, halt the core, read the fault registers and see where it stopped —
+  on whatever laptop happens to be there.
+- **Hardware kits and products.** Ship a web page that checks a board is alive,
+  reads its serial number out of flash, or verifies it was programmed
+  correctly. Buyers do not install anything.
+- **Test rigs and production lines.** A browser tab as the operator interface,
+  with the debug access built into it.
+- **Building better tools.** This is a foundation. A full web debugger — with
+  breakpoints, a memory viewer, source-level stepping — can be built on top.
+
+The target keeps running its own program the whole time. This is **not** a
+bootloader upload: nothing is overwritten, nothing needs to be prepared on the
+chip. Debug access is a separate port that is always there.
+
+## How the pieces fit
+
+Reading the diagram from the top down:
+
+| Layer | What it does |
+|---|---|
+| **Your page** | Whatever you are building: a lesson, a test jig, a diagnostic tool |
+| **cmsis-dap-webhid** | This library. Supplies the transport dapjs lacks, plus the debug helpers you need right after it |
+| **dapjs** | ARM's own library. Speaks the CMSIS-DAP command protocol and the ARM debug interface on top of it |
+| **WebHID** | The browser API that lets a page talk to a USB HID device, once the user grants permission |
+| **CMSIS-DAP probe** | The hardware, on the board or separate. Turns USB packets into SWD signalling |
+| **Target chip** | Any ARM Cortex-M, reached through its debug port |
+
+The user grants access to the probe once, from a click. From then on the page
+can reach it again without asking.
+
+## Why this exists
+
 [dapjs](https://github.com/ARMmbed/dapjs), ARM's own library, ships transports
-for Node and for WebUSB — but **CMSIS-DAP v1 probes enumerate as HID devices**,
-so in a browser they cannot be reached at all. This is the missing transport,
-plus the Cortex-M debug helpers you need right after it.
+for Node (node-hid, usb) and for the browser over **WebUSB** — but **CMSIS-DAP
+v1 probes enumerate as HID devices**. On Windows and macOS the operating system
+claims HID devices exclusively, so WebUSB cannot open them, and there is no
+WebHID transport in dapjs. The result is that the most common kind of probe
+cannot be reached from a browser at all.
+
+This is that missing transport, written against the real wire protocol —
+64-byte reports in both directions, report ID 0 — plus the handful of Cortex-M
+helpers you need the moment the link comes up.
 
 ```js
 import { requestTransport, identify, registers, trace, hex } from 'cmsis-dap-webhid';
@@ -23,13 +82,6 @@ console.log(await registers(target));     // { PC: ..., SP: ..., LR: ... }
 console.log((await trace(target, 10)).map(v => hex(v)));
 await target.resume();
 ```
-
-## Why this exists
-
-Debugging an ARM microcontroller normally means installing a toolchain. With a
-CMSIS-DAP probe and a browser, you can halt a running core, single-step it and
-read its memory from a web page — no install, nothing to configure. That is a
-useful teaching tool, and a convenient one for quick inspection.
 
 ## Install
 
@@ -113,6 +165,10 @@ separate problem. `dapjs` offers `DAPLink` for probes that support it.
 `examples/debugger/` is a self-contained page: connect a probe, halt the core,
 step through instructions and dump memory. Serve it over HTTPS or `localhost`
 and open it in Chrome.
+
+## Author
+
+David J. Cuartielles Ruiz
 
 ## Licence
 

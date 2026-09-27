@@ -9,7 +9,7 @@
     "./transport": "./src/transport.js",
     "./debug": "./src/debug.js"
   },
-  "files": ["src", "README.md", "LICENSE"],
+  "files": ["src", "docs", "README.md", "LICENSE"],
   "keywords": [
     "cmsis-dap", "webhid", "dapjs", "swd", "cortex-m", "arm",
     "debugger", "embedded", "microcontroller", "browser"
@@ -20,10 +20,11 @@
   "peerDependenciesMeta": {
     "dapjs": { "optional": true }
   },
+  "author": "David J. Cuartielles Ruiz",
   "license": "GPL-3.0-or-later",
-  "repository": { "type": "git", "url": "git+https://github.com/USUARIO/cmsis-dap-webhid.git" },
-  "bugs": { "url": "https://github.com/USUARIO/cmsis-dap-webhid/issues" },
-  "homepage": "https://github.com/USUARIO/cmsis-dap-webhid#readme",
+  "repository": { "type": "git", "url": "git+https://github.com/dcuartielles/cmsis-dap-webhid.git" },
+  "bugs": { "url": "https://github.com/dcuartielles/cmsis-dap-webhid/issues" },
+  "homepage": "https://github.com/dcuartielles/cmsis-dap-webhid#readme",
   "engines": { "node": ">=18" },
   "sideEffects": false
 }

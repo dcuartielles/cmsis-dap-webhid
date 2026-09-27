@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 470" width="720" height="470"
+     font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" role="img"
+     aria-label="How the browser reaches an ARM chip: web page, this library, dapjs, WebHID, USB, CMSIS-DAP probe, SWD, target microcontroller">
+  <style>
+    .bg    { fill: #faf9f7; }
+    .box   { fill: #ffffff; stroke: #d9d4cc; stroke-width: 1.5; }
+    .ours  { fill: #e8f3ed; stroke: #1f6f4a; stroke-width: 2; }
+    .chip  { fill: #f4efe6; stroke: #b08a3e; stroke-width: 1.5; }
+    .title { fill: #1c1b19; font-size: 14px; font-weight: 600; }
+    .sub   { fill: #6b6660; font-size: 11.5px; }
+    .lane  { fill: #6b6660; font-size: 10.5px; font-weight: 600; letter-spacing: .08em; }
+    .wire  { stroke: #6b6660; stroke-width: 1.6; fill: none; }
+    .wlabel{ fill: #6b6660; font-size: 11px; font-style: italic; }
+    .accent{ fill: #1f6f4a; font-size: 11.5px; font-weight: 600; }
+    .divide{ stroke: #d9d4cc; stroke-width: 1; stroke-dasharray: 4 4; }
+    @media (prefers-color-scheme: dark) {
+      .bg    { fill: #16181a; }
+      .box   { fill: #1e2124; stroke: #343a40; }
+      .ours  { fill: #16332a; stroke: #5cc08c; }
+      .chip  { fill: #2a2418; stroke: #d4a04a; }
+      .title { fill: #e8e6e3; }
+      .sub, .lane, .wlabel { fill: #9b9691; }
+      .wire  { stroke: #9b9691; }
+      .accent{ fill: #5cc08c; }
+      .divide{ stroke: #343a40; }
+    }
+  </style>
+
+  <rect class="bg" width="720" height="470" rx="6"/>
+
+  <!-- ─────────── software, in the browser ─────────── -->
+  <text class="lane" x="30" y="34">IN THE BROWSER</text>
+
+  <rect class="box" x="30" y="46" width="300" height="60" rx="8"/>
+  <text class="title" x="46" y="72">Your web page</text>
+  <text class="sub"   x="46" y="91">teaching tool, diagnostics, kit setup…</text>
+
+  <rect class="ours" x="30" y="120" width="300" height="74" rx="8"/>
+  <text class="title"  x="46" y="145">cmsis-dap-webhid</text>
+  <text class="accent" x="46" y="163">WebHIDTransport</text>
+  <text class="sub"    x="46" y="181">step · clearError · registers · identify</text>
+
+  <rect class="box" x="30" y="208" width="300" height="56" rx="8"/>
+  <text class="title" x="46" y="232">dapjs  <tspan class="sub">(ARM)</tspan></text>
+  <text class="sub"   x="46" y="250">CmsisDAP · ADI · CortexM</text>
+
+  <rect class="box" x="30" y="278" width="300" height="56" rx="8"/>
+  <text class="title" x="46" y="302">WebHID</text>
+  <text class="sub"   x="46" y="320">navigator.hid — Chrome and Edge only</text>
+
+  <!-- vertical flow on the left -->
+  <path class="wire" d="M180 106 L180 120"/>
+  <path class="wire" d="M180 194 L180 208"/>
+  <path class="wire" d="M180 264 L180 278"/>
+
+  <!-- ─────────── the boundary ─────────── -->
+  <line class="divide" x1="30" y1="360" x2="690" y2="360"/>
+  <text class="lane" x="30" y="382">HARDWARE</text>
+
+  <!-- ─────────── hardware ─────────── -->
+  <rect class="box" x="30" y="394" width="300" height="58" rx="8"/>
+  <text class="title" x="46" y="418">CMSIS-DAP probe</text>
+  <text class="sub"   x="46" y="436">on-board, or a separate debug probe</text>
+
+  <rect class="chip" x="390" y="394" width="300" height="58" rx="8"/>
+  <text class="title" x="406" y="418">Target microcontroller</text>
+  <text class="sub"   x="406" y="436">any ARM Cortex-M</text>
+
+  <!-- USB down, SWD across -->
+  <path class="wire" d="M180 334 L180 394" marker-end="url(#tip)"/>
+  <text class="wlabel" x="192" y="370">USB</text>
+
+  <path class="wire" d="M330 423 L390 423" marker-end="url(#tip)"/>
+  <text class="wlabel" x="337" y="413">SWD</text>
+
+  <!-- ─────────── what you can do ─────────── -->
+  <rect class="box" x="390" y="46" width="300" height="288" rx="8"/>
+  <text class="title" x="406" y="72">What that gets you</text>
+
+  <text class="sub" x="406" y="100">Halt a core while it runs</text>
+  <text class="sub" x="406" y="122">Step one instruction at a time</text>
+  <text class="sub" x="406" y="144">Read and write registers</text>
+  <text class="sub" x="406" y="166">Read and write memory, RAM and flash</text>
+  <text class="sub" x="406" y="188">Identify the chip from its CPUID</text>
+
+  <line class="divide" x1="406" y1="208" x2="674" y2="208"/>
+
+  <text class="sub" x="406" y="232">No toolchain. No drivers to install.</text>
+  <text class="sub" x="406" y="254">No bootloader: the target keeps running</text>
+  <text class="sub" x="406" y="272">its program while you inspect it.</text>
+
+  <text class="accent" x="406" y="304">Not included: writing flash needs a</text>
+  <text class="accent" x="406" y="322">device-specific algorithm.</text>
+
+  <defs>
+    <marker id="tip" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#6b6660"/>
+    </marker>
+  </defs>
+</svg>
