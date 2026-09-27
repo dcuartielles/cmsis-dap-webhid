@@ -42,6 +42,7 @@ export {
     registers,
     identify,
     probeMemory,
+    resetAndRun,
     hex,
 } from './debug.js';
 

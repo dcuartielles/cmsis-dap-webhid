@@ -185,6 +185,65 @@ export async function probeMemory(target, addresses) {
     return map;
 }
 
+/** AIRCR only accepts writes carrying this key in its upper half. */
+const VECTKEY = 0x05fa0000;
+const SYSRESETREQ = 1 << 2;
+
+/** DEMCR bit that halts the core the instant it comes out of reset. */
+const VC_CORERESET = 1 << 0;
+
+/**
+ * Reset the target and let it run.
+ *
+ * Resetting is not enough on its own. `SYSRESETREQ` restarts the system, but
+ * the debug domain survives it: if the core was halted — and after flashing it
+ * always is — it comes out of reset still halted, and the board sits there
+ * doing nothing until someone presses the button. The core has to be released
+ * from debug as well, which is what the final write does.
+ *
+ * @param {object} target  A connected dapjs CortexM
+ * @param {object} [options]
+ * @param {boolean} [options.halt=false]  Stop at the reset vector instead of
+ *   running, for debugging startup code
+ */
+export async function resetAndRun(target, { halt = false } = {}) {
+    // Catch the core at the reset vector, or explicitly do not.
+    await target.writeMem32(REG.DEMCR, halt ? VC_CORERESET : 0);
+
+    if (halt) {
+        await target.writeMem32(REG.DHCSR, DBGKEY | DHCSR.C_DEBUGEN | DHCSR.C_HALT);
+    }
+
+    // The chip stops answering for a moment as it restarts, so a failure here
+    // usually means the reset worked rather than that it did not.
+    try {
+        await target.writeMem32(REG.AIRCR, VECTKEY | SYSRESETREQ);
+    } catch (error) {
+        // Expected: the transfer is cut short by the reset itself.
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    if (halt) {
+        await target.writeMem32(REG.DEMCR, 0);
+        return;
+    }
+
+    // Hand the core back. Writing DHCSR with neither C_DEBUGEN nor C_HALT
+    // takes the debugger out of the way so the new firmware actually starts.
+    for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+            await target.writeMem32(REG.DHCSR, DBGKEY);
+            return;
+        } catch (error) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+    }
+    throw new Error(
+        'the target was reset but would not answer afterwards: it may be ' +
+        'running already, but the debug link needs reconnecting');
+}
+
 /** Format a value as a fixed-width hexadecimal string. */
 export const hex = (value, digits = 8) =>
     '0x' + (value >>> 0).toString(16).padStart(digits, '0');

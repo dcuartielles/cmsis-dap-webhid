@@ -31,7 +31,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { FlashProgrammer, OPERATION } from '../src/flash.js';
-import { CORE_REG, DHCSR, REG, SPECIAL } from '../src/debug.js';
+import { CORE_REG, DHCSR, REG, SPECIAL, resetAndRun } from '../src/debug.js';
 
 /** An algorithm shaped like the RA4M1 one, without the vendor's code. */
 function fakeAlgorithm() {
@@ -338,6 +338,42 @@ test('verify compares against the erased value past the end of the image', async
     target.memory.set(4, 0x00000000);
     await assert.rejects(() => flash.verify(0, new Uint8Array([1, 2, 3, 4, 0xff])),
         /verify failed at 0x4/);
+});
+
+test('reset hands the core back instead of leaving it halted', async () => {
+    // The bug this prevents: SYSRESETREQ restarts the system but the debug
+    // domain survives it, so a core halted for flashing comes out of reset
+    // still halted and the board does nothing until someone presses the
+    // button.
+    const { target } = programmer();
+    await resetAndRun(target);
+
+    const writes = target.calls.filter(c => c[0] === 'writeMem32');
+    const aircr = writes.find(c => c[1] === REG.AIRCR);
+    assert.ok(aircr, 'a system reset must actually be requested');
+    assert.equal(aircr[2] >>> 16, 0x05fa, 'AIRCR needs its key');
+    assert.ok(aircr[2] & (1 << 2), 'SYSRESETREQ must be set');
+
+    const lastDhcsr = writes.filter(c => c[1] === REG.DHCSR).map(c => c[2]).pop();
+    assert.ok(!(lastDhcsr & DHCSR.C_HALT), 'the core must not be left halted');
+    assert.ok(!(lastDhcsr & DHCSR.C_DEBUGEN),
+        'debug must be released, or the core stays under the debugger');
+
+    const demcr = writes.find(c => c[1] === REG.DEMCR);
+    assert.equal(demcr[2], 0, 'no vector catch, or it halts at the reset vector');
+});
+
+test('reset can instead stop at the reset vector', async () => {
+    const { target } = programmer();
+    await resetAndRun(target, { halt: true });
+
+    const writes = target.calls.filter(c => c[0] === 'writeMem32');
+    const firstDemcr = writes.find(c => c[1] === REG.DEMCR);
+    assert.equal(firstDemcr[2], 1, 'VC_CORERESET catches the core out of reset');
+
+    const lastDhcsr = writes.filter(c => c[1] === REG.DHCSR).map(c => c[2]).pop();
+    assert.ok(lastDhcsr & DHCSR.C_DEBUGEN,
+        'debugging startup code means keeping the core');
 });
 
 test('OPERATION carries the FlashOS codes', () => {

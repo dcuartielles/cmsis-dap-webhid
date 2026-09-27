@@ -121,7 +121,7 @@
 import { CortexM } from 'https://esm.sh/dapjs@2.3.0';
 import {
   requestTransport, getTransports, parseFLM, FlashProgrammer,
-  openPackFile, selectAlgorithm, readFirmware,
+  openPackFile, selectAlgorithm, readFirmware, resetAndRun,
   identify, readSafe, clearError, hex,
 } from '../../src/index.js';
 
@@ -321,9 +321,12 @@ $('program').onclick = async () => {
     const seconds = ((Date.now() - started) / 1000).toFixed(1);
     show('result', 'Written and verified in ' + seconds + ' s.' + NL +
       'Resetting the board...', 'ok');
-    await target.reset();
+    // Not target.reset(): that restarts the system but leaves the core held
+    // by the debugger, so the board sits there until someone presses reset.
+    await resetAndRun(target);
     show('result', 'Written and verified in ' + seconds + ' s.' + NL +
-      'The board has been reset and is running the new firmware.', 'ok');
+      'The board has been reset and is running the new firmware.' + NL +
+      'The debug link has been handed back; reload to connect again.', 'ok');
   } catch (e) {
     console.error(e);
     await clearError(target).catch(() => {});

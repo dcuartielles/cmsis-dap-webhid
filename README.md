@@ -128,6 +128,7 @@ from `localhost`.
 | `registers(target)` | All core registers at once |
 | `identify(target)` | Which Cortex-M this is, from CPUID |
 | `clearError(target)` | **Recover from a stuck transfer.** See below |
+| `resetAndRun(target, {halt})` | Reset, and actually let the board run |
 | `readSafe(target, addr)` | Read, returning `null` for unmapped addresses |
 | `probeMemory(target, addrs)` | Find where memory actually is |
 
@@ -171,6 +172,13 @@ return address. The algorithm appears to hang and the flash is never touched —
 on a real RA4M1 the core ended up at `0x0000e4e6`, deep inside the sketch.
 `FlashProgrammer` sets `PRIMASK` and `C_MASKINTS` before every call, and clears
 them afterwards so the new firmware does not run with its interrupts dead.
+
+**Resetting is not enough to make a board run.** `SYSRESETREQ` restarts the
+system, but the debug domain survives it: a core halted for flashing — which it
+always is — comes out of reset still halted, and the board sits there until
+someone presses the button. `resetAndRun()` requests the reset and then hands
+the core back by clearing `C_DEBUGEN`. Pass `{ halt: true }` to stop at the
+reset vector instead, which is how you debug startup code.
 
 **`Init` failing is about the chip, not about you.** Vendor algorithms inspect
 the part before doing anything and refuse if its clocks or power mode would
