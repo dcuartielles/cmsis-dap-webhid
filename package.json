@@ -20,7 +20,7 @@
   "peerDependenciesMeta": {
     "dapjs": { "optional": true }
   },
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "repository": { "type": "git", "url": "git+https://github.com/USUARIO/cmsis-dap-webhid.git" },
   "bugs": { "url": "https://github.com/USUARIO/cmsis-dap-webhid/issues" },
   "homepage": "https://github.com/USUARIO/cmsis-dap-webhid#readme",

@@ -116,4 +116,11 @@ and open it in Chrome.
 
 ## Licence
 
-MIT. `dapjs` is a peer dependency and is licensed separately by ARM (Apache-2.0).
+**GPL-3.0-or-later.** See [LICENSE](LICENSE).
+
+If you use this library, your project must also be released under the GPL.
+That is deliberate: improvements to tooling like this are worth more shared.
+
+`dapjs` is a peer dependency, licensed separately by ARM under Apache-2.0.
+Apache-2.0 is compatible with GPLv3, so combining them is fine — but note it is
+**not** compatible with GPLv2, which is why this is v3.
