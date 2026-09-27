@@ -80,7 +80,7 @@
   <text class="sub" x="406" y="100">Halt a core while it runs</text>
   <text class="sub" x="406" y="122">Step one instruction at a time</text>
   <text class="sub" x="406" y="144">Read and write registers</text>
-  <text class="sub" x="406" y="166">Read and write memory, RAM and flash</text>
+  <text class="sub" x="406" y="166">Read and write memory</text>
   <text class="sub" x="406" y="188">Identify the chip from its CPUID</text>
 
   <line class="divide" x1="406" y1="208" x2="674" y2="208"/>
@@ -89,8 +89,8 @@
   <text class="sub" x="406" y="254">No bootloader: the target keeps running</text>
   <text class="sub" x="406" y="272">its program while you inspect it.</text>
 
-  <text class="accent" x="406" y="304">Not included: writing flash needs a</text>
-  <text class="accent" x="406" y="322">device-specific algorithm.</text>
+  <text class="accent" x="406" y="304">Write flash too, by running your chip</text>
+  <text class="accent" x="406" y="322">vendor’s own .FLM algorithm on it.</text>
 
   <defs>
     <marker id="tip" viewBox="0 0 10 10" refX="9" refY="5"

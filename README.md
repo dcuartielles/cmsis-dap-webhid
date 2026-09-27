@@ -126,6 +126,16 @@ from `localhost`.
 | `readSafe(target, addr)` | Read, returning `null` for unmapped addresses |
 | `probeMemory(target, addrs)` | Find where memory actually is |
 
+### Writing flash
+
+| | |
+|---|---|
+| `parseFLM(buffer)` | Read a vendor `.FLM`: geometry, code and entry points |
+| `FlashProgrammer(target, algo, opts)` | Run that algorithm on the chip |
+| `.program(addr, bytes, opts)` | Erase the sectors and write the image |
+| `.verify(addr, bytes)` | Read back and compare |
+| `.eraseSector(addr)` / `.eraseAll()` | Erase without writing |
+
 ## Two things worth knowing
 
 **A failed transfer leaves the DAP stuck.** Reading an unmapped address returns
@@ -154,11 +164,41 @@ own permission.
 It should work with any CMSIS-DAP v1 probe. Reports of what does and does not
 work are welcome.
 
-## Scope
+## Writing flash
 
-This library covers **talking to the probe and debugging the core**. Writing
-flash is not included: that needs a device-specific flash algorithm, which is a
-separate problem. `dapjs` offers `DAPLink` for probes that support it.
+Nobody reimplements flash drivers. Every silicon vendor ships compiled
+`Init` / `EraseSector` / `ProgramPage` routines in a `.FLM` file, and debuggers
+copy those into the chip's RAM and let the chip program itself. OpenOCD and
+pyOCD both work this way, and so does this.
+
+```js
+import { parseFLM, FlashProgrammer } from 'cmsis-dap-webhid';
+
+const algorithm = parseFLM(await file.arrayBuffer());   // the vendor's .FLM
+const flash = new FlashProgrammer(target, algorithm, {
+  ramAddress: 0x20000000,        // where this chip's RAM starts
+  ramSize: 0x8000,
+});
+
+await flash.program(0x0, firmware, {
+  onProgress: ({ phase, done, total }) => console.log(phase, done, '/', total),
+});
+await flash.verify(0x0, firmware);
+await target.reset();
+```
+
+**You supply the `.FLM`; none is bundled.** Vendor algorithms come with vendor
+licences — the Renesas RA4M1 one, for instance, is Apache-2.0 from ARM but
+carries a Renesas notice limiting use to Renesas parts. That is a field-of-use
+restriction the GPL cannot accommodate, so redistributing it here is not an
+option. Download the CMSIS pack for your chip and pull the `.FLM` out of it; a
+pack is an ordinary zip.
+
+`node tools/inspect-flm.mjs path/to/Device.FLM` prints what is inside one.
+
+Two things the `.FLM` does not tell you, because they are not in it: **where
+the chip's RAM is**, which you pass as `ramAddress`, and **what to write**,
+which must be a raw `.bin` rather than a `.hex` or `.elf`.
 
 ## Example
 
@@ -171,6 +211,9 @@ to the probe directly from your machine.
 The source is `examples/debugger/`, a self-contained page: connect a probe,
 halt the core, step through instructions and dump memory. To run it locally,
 serve it over HTTPS or `localhost` — WebHID refuses to work otherwise.
+
+There is also a flasher, which takes a `.FLM` and a `.bin` and writes one to
+the other: <https://dcuartielles.github.io/cmsis-dap-webhid/examples/flasher/>
 
 ## Author
 

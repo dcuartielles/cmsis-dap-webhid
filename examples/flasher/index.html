@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<!--
+  cmsis-dap-webhid example — Copyright (C) 2026 David J. Cuartielles Ruiz
+  Licensed under the GNU General Public License v3 or later.
+  See <https://www.gnu.org/licenses/>.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CMSIS-DAP flasher</title>
+<style>
+  :root { --bg:#faf9f7; --fg:#1c1b19; --dim:#6b6660; --line:#e2ded8;
+          --card:#fff; --accent:#1f6f4a; --error:#a33; --warn:#8a5a00; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#16181a; --fg:#e8e6e3; --dim:#9b9691; --line:#2c3034;
+      --card:#1e2124; --accent:#5cc08c; --error:#e88; --warn:#d4a04a; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:32px 16px; background:var(--bg); color:var(--fg);
+         font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:780px; margin:0 auto; }
+  h1 { font-size:1.6rem; margin:0 0 4px; letter-spacing:-.01em; }
+  .sub { color:var(--dim); margin:0 0 24px; }
+  .card { background:var(--card); border:1px solid var(--line);
+          border-radius:10px; padding:18px; margin:14px 0; }
+  .card[data-off] { opacity:.5; pointer-events:none; }
+  button { padding:9px 18px; border-radius:7px; border:1px solid var(--accent);
+           background:none; color:var(--accent); font:inherit; font-size:.95rem;
+           cursor:pointer; margin:0 8px 8px 0; }
+  button:hover:not(:disabled) { background:var(--accent); color:var(--bg); }
+  button:disabled { opacity:.45; cursor:default; }
+  button.danger { border-color:var(--error); color:var(--error); }
+  button.danger:hover:not(:disabled) { background:var(--error); color:var(--bg); }
+  pre { margin:10px 0 0; white-space:pre-wrap; word-break:break-word;
+        font-size:.85rem; font-family:ui-monospace,Consolas,monospace; }
+  .ok { color:var(--accent); } .err { color:var(--error); }
+  .label { font-size:.78rem; text-transform:uppercase; letter-spacing:.04em;
+           color:var(--dim); font-weight:600; }
+  .note { border-left:3px solid var(--warn); padding:10px 14px; margin:14px 0;
+          background:color-mix(in srgb,var(--warn) 8%,transparent);
+          border-radius:0 7px 7px 0; }
+  code { background:color-mix(in srgb,var(--fg) 7%,transparent);
+         padding:1px 5px; border-radius:4px; font-size:.87em; }
+  input[type=text] { padding:7px 10px; border-radius:7px; border:1px solid var(--line);
+    background:var(--bg); color:var(--fg);
+    font-family:ui-monospace,Consolas,monospace; width:11em; }
+  input[type=file] { font:inherit; font-size:.9rem; color:var(--dim); max-width:100%; }
+  progress { width:100%; height:8px; margin-top:12px; }
+  .row { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+  .row label { font-size:.85rem; color:var(--dim); }
+</style>
+</head>
+<body>
+<main>
+  <h1>CMSIS-DAP flasher</h1>
+  <p class="sub">Write firmware to an ARM Cortex-M from the browser, using the
+  chip vendor's own flash algorithm.</p>
+
+  <div class="note" id="support" hidden></div>
+
+  <div class="note">
+    <strong>This erases the program currently on the board.</strong>
+    Nothing is written until you press the button in step 4, and the page tells
+    you exactly what it is about to do first.
+  </div>
+
+  <div class="card">
+    <div class="label">1 &middot; probe</div>
+    <p style="margin:6px 0 12px">The board can be running its program.</p>
+    <button id="connect">Connect probe</button>
+    <pre id="probe"></pre>
+  </div>
+
+  <div class="card" data-off id="step-algo">
+    <div class="label">2 &middot; flash algorithm</div>
+    <p style="margin:6px 0 12px">A <code>.FLM</code> for your chip, from its
+    vendor's CMSIS pack. None is shipped with this library: vendor licences
+    usually forbid redistributing them.</p>
+    <input type="file" id="flm" accept=".FLM,.flm">
+    <div class="row" style="margin-top:14px">
+      <label>RAM at <input type="text" id="ram" value="0x20000000"></label>
+      <label>size <input type="text" id="ramsize" value="0x8000" style="width:7em"></label>
+      <button id="detect">Detect</button>
+    </div>
+    <pre id="algo"></pre>
+  </div>
+
+  <div class="card" data-off id="step-image">
+    <div class="label">3 &middot; firmware</div>
+    <p style="margin:6px 0 12px">A raw <code>.bin</code>. Not a
+    <code>.hex</code> or an <code>.elf</code>: those carry their own addresses
+    and would need converting first.</p>
+    <input type="file" id="bin" accept=".bin">
+    <div class="row" style="margin-top:14px">
+      <label>write at <input type="text" id="addr" value="0x00000000"></label>
+    </div>
+    <pre id="image"></pre>
+  </div>
+
+  <div class="card" data-off id="step-write">
+    <div class="label">4 &middot; write</div>
+    <button id="program" class="danger">Erase and program</button>
+    <button id="verifyOnly">Verify only</button>
+    <progress id="bar" value="0" max="1" hidden></progress>
+    <pre id="result"></pre>
+  </div>
+</main>
+
+<script type="module">
+import { CortexM } from 'https://esm.sh/dapjs@2.3.0';
+import {
+  requestTransport, getTransports, parseFLM, FlashProgrammer,
+  identify, readSafe, clearError, hex,
+} from '../../src/index.js';
+
+const $ = id => document.getElementById(id);
+const show = (id, text, cls) => { $(id).textContent = text; $(id).className = cls || ''; };
+const NL = String.fromCharCode(10);
+const enable = (id, on) => {
+  if (on) $(id).removeAttribute('data-off'); else $(id).setAttribute('data-off', '');
+};
+
+let transport = null, target = null, algorithm = null, image = null;
+
+if (!('hid' in navigator)) {
+  $('support').hidden = false;
+  $('support').innerHTML = '<strong>This browser does not support WebHID.</strong><br>' +
+    'Chrome or Edge are required; Firefox and Safari do not implement it.';
+  $('connect').disabled = true;
+}
+
+const parseHex = value => {
+  const n = parseInt(value, 16);
+  if (!Number.isFinite(n)) throw new Error(`"${value}" is not a hex number`);
+  return n >>> 0;
+};
+
+async function attach(t) {
+  transport = t;
+  target = new CortexM(transport);
+  await target.connect();
+  const id = await identify(target);
+  show('probe', [
+    'device: ' + transport.device.productName,
+    'core:   ' + id.core + '  (CPUID ' + hex(id.cpuid) + ')',
+  ].join(NL), 'ok');
+  enable('step-algo', true);
+}
+
+$('connect').onclick = async () => {
+  try {
+    show('probe', 'Waiting for a device...');
+    await attach(await requestTransport());
+  } catch (e) { show('probe', 'Error: ' + e.message, 'err'); console.error(e); }
+};
+
+// Where RAM sits is in the chip's datasheet, not in the .FLM, so offer to look.
+$('detect').onclick = async () => {
+  if (!target) return;
+  const candidates = [0x20000000, 0x1ffe0000, 0x20004000, 0x10000000, 0x00800000];
+  try {
+    await target.halt();
+    for (const base of candidates) {
+      const value = await readSafe(target, base);
+      if (value === null) continue;
+      // Readable is not enough: RAM must also take a write.
+      const probe = (value ^ 0xa5a5a5a5) >>> 0;
+      await target.writeMem32(base, probe);
+      const back = await readSafe(target, base);
+      await target.writeMem32(base, value);
+      if (back === probe) {
+        $('ram').value = hex(base);
+        show('algo', 'RAM responds at ' + hex(base) + '.' + NL +
+          'Its size is not discoverable this way: check the datasheet.', 'ok');
+        return;
+      }
+    }
+    show('algo', 'No RAM found at the usual addresses. Enter it by hand.', 'err');
+  } catch (e) {
+    await clearError(target).catch(() => {});
+    show('algo', 'Error: ' + e.message, 'err');
+  }
+};
+
+$('flm').onchange = async event => {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    algorithm = parseFLM(await file.arrayBuffer());
+    const d = algorithm.device;
+    show('algo', [
+      'device:  ' + d.name,
+      'flash:   ' + hex(d.address) + ' + ' + (d.size / 1024) + ' KB',
+      'page:    ' + d.pageSize + ' bytes',
+      'erased:  ' + hex(d.valueEmpty, 2),
+      'has:     ' + Object.keys(algorithm.entries).join(', '),
+    ].join(NL), 'ok');
+    $('addr').value = hex(d.address);
+    enable('step-image', true);
+  } catch (e) {
+    algorithm = null;
+    show('algo', 'Error: ' + e.message, 'err');
+  }
+};
+
+$('bin').onchange = async event => {
+  const file = event.target.files[0];
+  if (!file) return;
+  image = new Uint8Array(await file.arrayBuffer());
+  const pages = algorithm
+    ? Math.ceil(image.length / algorithm.device.pageSize) : 0;
+  show('image', file.name + ': ' + image.length + ' bytes' +
+    (pages ? '  (' + pages + ' pages)' : ''), 'ok');
+  enable('step-write', true);
+};
+
+function makeProgrammer() {
+  if (!algorithm) throw new Error('load a .FLM first');
+  return new FlashProgrammer(target, algorithm, {
+    ramAddress: parseHex($('ram').value),
+    ramSize: parseHex($('ramsize').value),
+  });
+}
+
+function progress(report) {
+  $('bar').hidden = false;
+  $('bar').value = report.done;
+  $('bar').max = report.total;
+  show('result', report.phase + ' ' + report.done + '/' + report.total);
+}
+
+// Two deliberate clicks rather than a modal: a browser dialog blocks the page,
+// and saying plainly what is about to happen beats asking "are you sure?".
+let armed = false;
+$('program').onclick = async () => {
+  if (!image || !algorithm) return;
+  const at = parseHex($('addr').value);
+
+  if (!armed) {
+    armed = true;
+    $('program').textContent = 'Confirm: erase and write';
+    show('result', [
+      'About to erase and write ' + image.length + ' bytes at ' + hex(at),
+      'on ' + algorithm.device.name + '.',
+      'The program currently on the board will be lost.',
+      '',
+      'Press the button again to go ahead, or reload to cancel.',
+    ].join(NL), 'err');
+    return;
+  }
+
+  armed = false;
+  $('program').textContent = 'Erase and program';
+  $('program').disabled = true;
+  try {
+    const flash = makeProgrammer();
+    const started = Date.now();
+    await flash.program(at, image, { onProgress: progress });
+    await flash.verify(at, image, { onProgress: progress });
+    const seconds = ((Date.now() - started) / 1000).toFixed(1);
+    show('result', 'Written and verified in ' + seconds + ' s.' + NL +
+      'Resetting the board...', 'ok');
+    await target.reset();
+    show('result', 'Written and verified in ' + seconds + ' s.' + NL +
+      'The board has been reset and is running the new firmware.', 'ok');
+  } catch (e) {
+    console.error(e);
+    await clearError(target).catch(() => {});
+    show('result', 'Error: ' + e.message, 'err');
+  } finally {
+    $('program').disabled = false;
+  }
+};
+
+$('verifyOnly').onclick = async () => {
+  if (!image || !algorithm) return;
+  try {
+    const flash = makeProgrammer();
+    await flash.verify(parseHex($('addr').value), image, { onProgress: progress });
+    show('result', 'The flash matches the file.', 'ok');
+  } catch (e) {
+    await clearError(target).catch(() => {});
+    show('result', e.message, 'err');
+  }
+};
+
+// Reattach silently if the page already has permission.
+getTransports().then(async list => {
+  if (!list.length) return;
+  try { await list[0].open(); await attach(list[0]); } catch (e) { /* ask the user */ }
+});
+</script>
+</body>
+</html>
