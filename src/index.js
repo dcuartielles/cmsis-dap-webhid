@@ -67,3 +67,9 @@ export {
     selectAlgorithm,
     fetchAlgorithm,
 } from './pack.js';
+
+export {
+    parseIntelHex,
+    flatten,
+    readFirmware,
+} from './hex.js';

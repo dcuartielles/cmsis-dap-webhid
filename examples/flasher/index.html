@@ -97,12 +97,13 @@
 
   <div class="card" data-off id="step-image">
     <div class="label">3 &middot; firmware</div>
-    <p style="margin:6px 0 12px">A raw <code>.bin</code>. Not a
-    <code>.hex</code> or an <code>.elf</code>: those carry their own addresses
-    and would need converting first.</p>
-    <input type="file" id="bin" accept=".bin">
+    <p style="margin:6px 0 12px">A <code>.hex</code> or a raw
+    <code>.bin</code>. Prefer <code>.hex</code>: it carries the addresses it
+    belongs at, so it cannot land in the wrong place.</p>
+    <input type="file" id="bin" accept=".bin,.hex">
     <div class="row" style="margin-top:14px">
       <label>write at <input type="text" id="addr" value="0x00000000"></label>
+      <span class="hint" id="addrNote"></span>
     </div>
     <pre id="image"></pre>
   </div>
@@ -120,7 +121,7 @@
 import { CortexM } from 'https://esm.sh/dapjs@2.3.0';
 import {
   requestTransport, getTransports, parseFLM, FlashProgrammer,
-  openPackFile, selectAlgorithm,
+  openPackFile, selectAlgorithm, readFirmware,
   identify, readSafe, clearError, hex,
 } from '../../src/index.js';
 
@@ -242,12 +243,36 @@ $('flm').onchange = async event => {
 $('bin').onchange = async event => {
   const file = event.target.files[0];
   if (!file) return;
-  image = new Uint8Array(await file.arrayBuffer());
-  const pages = algorithm
-    ? Math.ceil(image.length / algorithm.device.pageSize) : 0;
-  show('image', file.name + ': ' + image.length + ' bytes' +
-    (pages ? '  (' + pages + ' pages)' : ''), 'ok');
-  enable('step-write', true);
+  try {
+    const raw = new Uint8Array(await file.arrayBuffer());
+    // A .hex states where it goes; a .bin cannot, so keep whatever is typed.
+    const firmware = readFirmware(raw, {
+      name: file.name,
+      address: parseHex($('addr').value),
+    });
+    image = firmware.data;
+
+    if (firmware.format === 'ihex') {
+      $('addr').value = hex(firmware.address);
+      $('addrNote').textContent = 'taken from the .hex file';
+    } else {
+      $('addrNote').textContent = 'a .bin does not say — check this is right';
+    }
+
+    const pages = algorithm
+      ? Math.ceil(image.length / algorithm.device.pageSize) : 0;
+    show('image', [
+      file.name + ': ' + image.length + ' bytes' +
+        (pages ? '  (' + pages + ' pages)' : ''),
+      'writes ' + hex(firmware.address) + ' .. ' +
+        hex(firmware.address + image.length - 1),
+      firmware.entry !== undefined ? 'entry point ' + hex(firmware.entry) : '',
+    ].filter(Boolean).join(NL), 'ok');
+    enable('step-write', true);
+  } catch (e) {
+    image = null;
+    show('image', 'Error: ' + e.message, 'err');
+  }
 };
 
 function makeProgrammer() {

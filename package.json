@@ -10,7 +10,8 @@
     "./debug": "./src/debug.js",
     "./flm": "./src/flm.js",
     "./flash": "./src/flash.js",
-    "./pack": "./src/pack.js"
+    "./pack": "./src/pack.js",
+    "./hex": "./src/hex.js"
   },
   "files": [
     "src",

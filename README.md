@@ -140,6 +140,8 @@ from `localhost`.
 | `.program(addr, bytes, opts)` | Erase the sectors and write the image |
 | `.verify(addr, bytes)` | Read back and compare |
 | `.eraseSector(addr)` / `.eraseAll()` | Erase without writing |
+| `readFirmware(content, {name, address})` | Read a `.hex` or `.bin`, with its address |
+| `parseIntelHex(text)` | Segments, bounds and entry point of a `.hex` |
 
 ### Vendor packs
 
@@ -287,9 +289,26 @@ const { data, ram } = await selectAlgorithm(archive, { device: 'R7FA4M1AB' });
 Only the parts needed are read out of it, so a 90 MB pack does not become 90 MB
 of memory. The flasher example accepts either a `.FLM` or a whole `.pack`.
 
-Two things the `.FLM` does not tell you, because they are not in it: **where
-the chip's RAM is**, which you pass as `ramAddress`, and **what to write**,
-which must be a raw `.bin` rather than a `.hex` or `.elf`.
+### Give it a `.hex` if you can
+
+A `.hex` carries the addresses it belongs at. A `.bin` does not, so someone has
+to know where it goes — and getting that wrong writes a perfectly good image to
+the wrong place, where it verifies clean and then does not run.
+
+```js
+import { readFirmware } from 'cmsis-dap-webhid';
+
+const { address, data } = readFirmware(text, { name: file.name });
+await flash.program(address, data);          // the file decided, not you
+```
+
+This is not hypothetical. Arduino's Uno R4 sketches link at `0x4000`, above a
+bootloader at `0x0`. Write one to `0x0` and you erase the bootloader — the board
+stops answering USB altogether — while the sketch sits 16 KB below where its
+own addresses point, so it does not run either. With a `.hex` neither happens.
+
+`readFirmware` still accepts a raw binary, but insists on being told an
+address rather than guessing one.
 
 ## Examples
 
