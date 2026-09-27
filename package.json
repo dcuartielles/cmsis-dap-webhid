@@ -1,7 +1,7 @@
 {
   "name": "cmsis-dap-webhid",
-  "version": "0.1.0",
-  "description": "WebHID transport for dapjs plus Cortex-M debug helpers: use CMSIS-DAP probes from the browser",
+  "version": "0.2.0",
+  "description": "Use CMSIS-DAP debug probes from a web page over WebHID: the transport dapjs lacks, plus Cortex-M debugging and flash programming",
   "type": "module",
   "main": "src/index.js",
   "exports": {
@@ -15,9 +15,11 @@
   },
   "files": [
     "src",
+    "tools",
     "docs",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "keywords": [
     "cmsis-dap",
@@ -27,9 +29,13 @@
     "cortex-m",
     "arm",
     "debugger",
+    "flash",
+    "flm",
+    "intel-hex",
     "embedded",
     "microcontroller",
-    "browser"
+    "browser",
+    "arduino"
   ],
   "peerDependencies": {
     "dapjs": "^2.3.0"
@@ -52,5 +58,11 @@
   "engines": {
     "node": ">=18"
   },
-  "sideEffects": false
+  "sideEffects": false,
+  "bin": {
+    "fetch-flm": "tools/fetch-flm.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  }
 }
