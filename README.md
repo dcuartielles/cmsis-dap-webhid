@@ -141,6 +141,15 @@ from `localhost`.
 | `.verify(addr, bytes)` | Read back and compare |
 | `.eraseSector(addr)` / `.eraseAll()` | Erase without writing |
 
+### Vendor packs
+
+| | |
+|---|---|
+| `fetchAlgorithm({pack, device})` | Fetch the right algorithm for a chip, in memory |
+| `openPackFile(blob)` / `openRemotePack(url)` | Read a pack without unpacking it |
+| `selectAlgorithm(archive, {device})` | Pick the algorithm a chip declares |
+| `parseDescriptor(xml)` | Devices, memories and algorithms from a `.pdsc` |
+
 ## Two things worth knowing
 
 **A failed transfer leaves the DAP stuck.** Reading an unmapped address returns
@@ -194,32 +203,62 @@ await target.reset();
 
 ### Getting the algorithm
 
-**You supply the `.FLM`; none is bundled.** Vendor algorithms come with vendor
-licences — the Renesas RA4M1 one, for instance, is Apache-2.0 from ARM but
-carries a Renesas notice limiting use to Renesas parts. That is a field-of-use
-restriction no free licence can pass on, so redistributing it here is not an
-option.
+**You supply the algorithm; none is bundled.** Vendor `.FLM` files come with
+vendor licences — the Renesas RA4M1 one, for instance, is Apache-2.0 from ARM
+but carries a Renesas notice limiting use to Renesas parts. That is a
+field-of-use restriction no free licence can pass on, so redistributing it here
+is not an option.
 
-What this library can do is save you the trip. `tools/fetch-flm.mjs` downloads
-the algorithm straight from the vendor's own CMSIS pack, so the file reaches
-you from them, under their terms:
+What this library can do is fetch it for you, straight from the vendor's own
+CMSIS pack, so the file reaches you from them under their terms. Name the chip
+and you get the right algorithm **and** the RAM settings it needs:
 
-```bash
-node tools/fetch-flm.mjs --search renesas          # which packs exist
-node tools/fetch-flm.mjs --pack Renesas.RA_DFP     # what is inside one
-node tools/fetch-flm.mjs --pack Renesas.RA_DFP --match RA4M1_256K
+```js
+import { fetchAlgorithm, parseFLM, FlashProgrammer } from 'cmsis-dap-webhid';
+
+const { data, ram, device } = await fetchAlgorithm({
+  pack: 'Renesas.RA_DFP',
+  device: 'R7FA4M1AB3CFM',      // a full part number works too
+});
+
+const flash = new FlashProgrammer(target, parseFLM(data), {
+  ramAddress: ram.start,        // read off the pack descriptor, not guessed
+  ramSize: ram.size,
+});
 ```
 
-A `.pack` is a zip, and HTTP range requests can read one without downloading
-it: that Renesas pack is 88 MB and the algorithm inside is 23 KB. Only the
-23 KB come down the wire, in about two seconds. The extracted file is checked
-against its CRC.
+Nothing touches the filesystem: the bytes come back in memory. The same from
+the command line, if you would rather have the file:
 
-It is a command-line tool rather than part of the web page for a dull reason:
-neither keil.com nor the vendor mirrors send CORS headers, so a browser cannot
-fetch a pack at all.
+```bash
+node tools/fetch-flm.mjs --search renesas
+node tools/fetch-flm.mjs --pack Renesas.RA_DFP --device R7FA4M1AB
+node tools/fetch-flm.mjs --pack Renesas.RA_DFP --device R7FA4M1AB --stdout
+```
 
-`node tools/inspect-flm.mjs path/to/Device.FLM` prints what is inside one.
+**A `.pack` is a zip, and it is read in place.** Range requests fetch the tail
+to find the central directory, then only the bytes of the entry wanted: that
+Renesas pack is 88 MB and the algorithm inside is 23 KB, so 23 KB travel, in
+about two seconds. Extracted data is checked against its CRC.
+
+### In a browser
+
+The code runs in a browser unchanged — but **the vendor servers refuse
+cross-origin requests**. Measured from a GitHub Pages origin: `keil.com`, its
+Azure mirror, `packs.download.arm.com` and `www2.renesas.eu` all fail CORS. The
+library is ready; the hosts are not, and a public CORS proxy is a poor thing to
+route firmware through.
+
+So in a browser, hand it the pack instead. Download it normally — that is
+ordinary navigation, not a fetch — and drop the `.pack` on the page:
+
+```js
+const archive = await openPackFile(file);           // a File or Blob
+const { data, ram } = await selectAlgorithm(archive, { device: 'R7FA4M1AB' });
+```
+
+Only the parts needed are read out of it, so a 90 MB pack does not become 90 MB
+of memory. The flasher example accepts either a `.FLM` or a whole `.pack`.
 
 Two things the `.FLM` does not tell you, because they are not in it: **where
 the chip's RAM is**, which you pass as `ramAddress`, and **what to write**,

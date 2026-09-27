@@ -50,6 +50,7 @@
   progress { width:100%; height:8px; margin-top:12px; }
   .row { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
   .row label { font-size:.85rem; color:var(--dim); }
+  .hint { font-size:.8rem; color:var(--dim); }
 </style>
 </head>
 <body>
@@ -75,11 +76,18 @@
 
   <div class="card" data-off id="step-algo">
     <div class="label">2 &middot; flash algorithm</div>
-    <p style="margin:6px 0 12px">A <code>.FLM</code> for your chip, from its
-    vendor's CMSIS pack. None is shipped with this library: vendor licences
-    usually forbid redistributing them.</p>
-    <input type="file" id="flm" accept=".FLM,.flm">
+    <p style="margin:6px 0 12px">A <code>.FLM</code> for your chip, or the whole
+    <code>.pack</code> from your vendor — this page will find the right
+    algorithm inside it and read the RAM settings off its descriptor. None is
+    shipped with this library: vendor licences usually forbid redistributing
+    them.</p>
+    <input type="file" id="flm" accept=".FLM,.flm,.pack,.zip">
     <div class="row" style="margin-top:14px">
+      <label>chip <input type="text" id="device" placeholder="R7FA4M1AB"
+             style="width:12em"></label>
+      <span class="hint">only needed for a <code>.pack</code></span>
+    </div>
+    <div class="row" style="margin-top:10px">
       <label>RAM at <input type="text" id="ram" value="0x20000000"></label>
       <label>size <input type="text" id="ramsize" value="0x8000" style="width:7em"></label>
       <button id="detect">Detect</button>
@@ -112,6 +120,7 @@
 import { CortexM } from 'https://esm.sh/dapjs@2.3.0';
 import {
   requestTransport, getTransports, parseFLM, FlashProgrammer,
+  openPackFile, selectAlgorithm,
   identify, readSafe, clearError, hex,
 } from '../../src/index.js';
 
@@ -184,14 +193,39 @@ $('detect').onclick = async () => {
   }
 };
 
+// A .pack is a zip: read it in place rather than loading 90 MB into memory.
+async function algorithmFromPack(file) {
+  const device = $('device').value.trim();
+  if (!device) throw new Error('name the chip to pick an algorithm from a pack');
+
+  show('algo', 'Reading the pack...');
+  const archive = await openPackFile(file);
+  const picked = await selectAlgorithm(archive, { device });
+
+  // The descriptor knows where this chip's RAM is; stop making the user guess.
+  if (picked.ram?.start) {
+    $('ram').value = hex(picked.ram.start);
+    $('ramsize').value = hex(picked.ram.size);
+  }
+  return picked;
+}
+
 $('flm').onchange = async event => {
   const file = event.target.files[0];
   if (!file) return;
   try {
-    algorithm = parseFLM(await file.arrayBuffer());
+    let note = '';
+    if (/\.(pack|zip)$/i.test(file.name)) {
+      const picked = await algorithmFromPack(file);
+      algorithm = parseFLM(picked.data);
+      note = picked.algorithm.name + '  (' + picked.device.name + ', ' +
+        (picked.device.core || 'unknown core') + ')' + NL;
+    } else {
+      algorithm = parseFLM(await file.arrayBuffer());
+    }
     const d = algorithm.device;
     show('algo', [
-      'device:  ' + d.name,
+      note + 'device:  ' + d.name,
       'flash:   ' + hex(d.address) + ' + ' + (d.size / 1024) + ' KB',
       'page:    ' + d.pageSize + ' bytes',
       'erased:  ' + hex(d.valueEmpty, 2),

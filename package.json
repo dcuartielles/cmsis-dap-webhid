@@ -9,7 +9,8 @@
     "./transport": "./src/transport.js",
     "./debug": "./src/debug.js",
     "./flm": "./src/flm.js",
-    "./flash": "./src/flash.js"
+    "./flash": "./src/flash.js",
+    "./pack": "./src/pack.js"
   },
   "files": [
     "src",

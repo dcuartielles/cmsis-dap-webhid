@@ -54,3 +54,16 @@ export {
     FlashProgrammer,
     OPERATION,
 } from './flash.js';
+
+export {
+    openZip,
+    openRemotePack,
+    openPackFile,
+    fetchPackIndex,
+    findPack,
+    packUrl,
+    parseDescriptor,
+    ramFor,
+    selectAlgorithm,
+    fetchAlgorithm,
+} from './pack.js';
