@@ -31,7 +31,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { FlashProgrammer, OPERATION } from '../src/flash.js';
-import { CORE_REG, DHCSR, REG } from '../src/debug.js';
+import { CORE_REG, DHCSR, REG, SPECIAL } from '../src/debug.js';
 
 /** An algorithm shaped like the RA4M1 one, without the vendor's code. */
 function fakeAlgorithm() {
@@ -139,10 +139,7 @@ test('it refuses to run when the chip has too little RAM', () => {
 test('a call sets up the registers a Cortex-M needs', async () => {
     const { flash, target } = programmer();
     await flash.call('EraseSector', [0x800]);
-
-    const resumed = target.calls.find(c => c[0] === 'resume');
-    assert.ok(resumed, 'the core must actually be resumed');
-    const registers = resumed[1];
+    const registers = target.lastRegisters();
 
     assert.equal(registers[CORE_REG.R0], 0x800, 'the argument goes in R0');
     assert.equal(registers[CORE_REG.R9], flash.staticBase,
@@ -151,8 +148,47 @@ test('a call sets up the registers a Cortex-M needs', async () => {
     assert.equal(registers[CORE_REG.LR], (flash.returnAddress | 1) >>> 0,
         'the link register needs the Thumb bit or the return faults');
     assert.equal(registers[CORE_REG.PC], (flash.codeBase + 0x1e8 | 1) >>> 0);
-    assert.equal(registers[CORE_REG.xPSR], 0x01000000,
-        'xPSR must have T set');
+    assert.equal(registers[CORE_REG.xPSR], 0x01000000, 'xPSR must have T set');
+});
+
+test('interrupts are masked before the algorithm runs', async () => {
+    // This is what makes the difference between working and silently doing
+    // nothing: on a board running its own program, an interrupt fires the
+    // moment the core resumes, the core jumps into the application's handler
+    // in flash and never returns to our breakpoint.
+    const { flash, target } = programmer();
+    await flash.call('EraseSector', [0x800]);
+
+    assert.equal(target.lastRegisters()[CORE_REG.SPECIAL], SPECIAL.PRIMASK,
+        'PRIMASK must be set so configurable interrupts cannot fire');
+
+    const dhcsrWrites = target.calls
+        .filter(c => c[0] === 'writeMem32' && c[1] === REG.DHCSR)
+        .map(c => c[2]);
+    assert.ok(dhcsrWrites.length >= 2,
+        'the core is resumed by writing DHCSR, not through resume()');
+
+    const [arming, running] = dhcsrWrites.slice(-2);
+    assert.ok(arming & DHCSR.C_HALT,
+        'C_MASKINTS is only accepted while C_HALT is set');
+    assert.ok(arming & DHCSR.C_MASKINTS);
+    assert.ok(running & DHCSR.C_MASKINTS,
+        'the mask must survive the write that releases the core');
+    assert.ok(!(running & DHCSR.C_HALT), 'the core must actually be released');
+    assert.equal(running >>> 16, 0xa05f, 'DHCSR needs its key in the top half');
+});
+
+test('landing outside the algorithm is reported as an interrupt, not a fault', async () => {
+    const { flash, target } = programmer();
+    // Where the real board ended up: inside its own program, in flash.
+    target.lastRegisters().returnTo = 0x0000e4e6;
+
+    await assert.rejects(
+        () => flash.call('EraseSector', [0]),
+        /interrupt .* took the core away/);
+
+    assert.equal(flash.loaded, false,
+        'whatever ran out there shares this RAM, so the algorithm must be reloaded');
 });
 
 test('a breakpoint is planted at the return address', async () => {
@@ -245,6 +281,20 @@ test('a short last page is padded with the erased value, not with junk', async (
 
     const second = target.memory.get(flash.bufferAddress + 4) >>> 0;
     assert.equal(second, 0xffffffff, 'the tail must read as erased');
+});
+
+test('the chip is not left with its interrupts masked', async () => {
+    const { flash, target } = programmer();
+    await flash.program(0, new Uint8Array(64), {});
+
+    assert.equal(target.lastRegisters()[CORE_REG.SPECIAL], 0,
+        'PRIMASK must be cleared, or the new firmware runs with no interrupts');
+
+    const last = target.calls
+        .filter(c => c[0] === 'writeMem32' && c[1] === REG.DHCSR)
+        .map(c => c[2]).pop();
+    assert.ok(!(last & DHCSR.C_MASKINTS),
+        'the final DHCSR write must drop the interrupt mask');
 });
 
 test('program erases every sector it is about to write', async () => {

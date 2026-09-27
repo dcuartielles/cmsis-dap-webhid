@@ -32,13 +32,16 @@
  * Supply the algorithm yourself: see `flm.js` for why none is bundled.
  */
 
-import { CORE_REG, DHCSR, REG } from './debug.js';
+import { CORE_REG, DHCSR, REG, SPECIAL } from './debug.js';
 
 /** FlashOS operation codes, passed to Init and UnInit. */
 export const OPERATION = { ERASE: 1, PROGRAM: 2, VERIFY: 3 };
 
 /** `BKPT #0` twice over, so a halfword-aligned return still lands on one. */
 const BREAKPOINT_WORD = 0xbe00be00;
+
+/** DHCSR only accepts writes carrying this key in its upper half. */
+const DBGKEY = 0xa05f0000;
 
 const DEFAULTS = {
     // Enough for the vendor routines, which are not deeply recursive.
@@ -161,7 +164,28 @@ export class FlashProgrammer {
             await this.target.writeCoreRegister(number, value >>> 0);
         }
 
-        await this.target.resume();
+        // Interrupts are the thing that breaks this. The target is running its
+        // own program, with its vector table in flash and its timers live; the
+        // moment the core resumes, an interrupt fires, the core jumps into the
+        // application's handler and never comes back to our breakpoint. The
+        // algorithm appears to hang, and the flash is never touched.
+        //
+        // Two belts: PRIMASK stops configurable interrupts, and C_MASKINTS
+        // stops the ones debug can mask. PRIMASK is the reliable one; not
+        // every part honours C_MASKINTS the same way.
+        try {
+            await this.target.writeCoreRegister(CORE_REG.SPECIAL, SPECIAL.PRIMASK);
+        } catch (error) {
+            // Older probes may refuse the special register; C_MASKINTS alone
+            // is still better than nothing.
+        }
+
+        // C_MASKINTS is only accepted while C_HALT is set, so set it first and
+        // then release C_HALT while keeping the mask.
+        const masked = DBGKEY | DHCSR.C_DEBUGEN | DHCSR.C_MASKINTS;
+        await this.target.writeMem32(REG.DHCSR, masked | DHCSR.C_HALT);
+        await this.target.writeMem32(REG.DHCSR, masked);
+
         await this._waitForReturn(name, timeout);
 
         return (await this.target.readCoreRegister(CORE_REG.R0)) >>> 0;
@@ -177,12 +201,10 @@ export class FlashProgrammer {
             const status = (await this.target.readMem32(REG.DHCSR)) >>> 0;
             if (status & DHCSR.S_HALT) {
                 const pc = (await this.target.readCoreRegister(CORE_REG.PC)) >>> 0;
-                // Halting anywhere else means the routine faulted rather than
-                // returned, and R0 would be meaningless.
+                // Halting anywhere else means the routine went astray rather
+                // than returned, and R0 would be meaningless.
                 if ((pc & ~1) !== this.returnAddress) {
-                    throw new Error(
-                        `${name} stopped at 0x${pc.toString(16)} instead of ` +
-                        `returning: the algorithm faulted`);
+                    this._astray(name, pc);
                 }
                 return;
             }
@@ -190,7 +212,56 @@ export class FlashProgrammer {
         }
         // Leave the core halted: a runaway algorithm must not keep writing.
         await this.target.halt();
+        const pc = (await this.target.readCoreRegister(CORE_REG.PC)) >>> 0;
+        if (!this._inAlgorithm(pc)) this._astray(name, pc, limit);
         throw new Error(`${name} did not return within ${limit} ms`);
+    }
+
+    /** Is this address inside the algorithm we loaded? */
+    _inAlgorithm(address) {
+        return address >= this.codeBase && address <= this.returnAddress;
+    }
+
+    /**
+     * The core ended up somewhere it should not be. Say something useful:
+     * landing outside the algorithm almost always means an interrupt took it.
+     */
+    _astray(name, pc, timeout) {
+        // Whatever ran out there has been using the same RAM, so the loaded
+        // algorithm can no longer be trusted.
+        this.loaded = false;
+
+        const where = `0x${pc.toString(16)}`;
+        if (!this._inAlgorithm(pc)) {
+            throw new Error(
+                `${name} left the algorithm and stopped at ${where}, outside ` +
+                `the RAM it was loaded into. An interrupt in the running ` +
+                `program most likely took the core away. Check that ` +
+                `interrupts are masked.`);
+        }
+        throw new Error(
+            timeout
+                ? `${name} did not return within ${timeout} ms, stuck at ${where}`
+                : `${name} stopped at ${where} instead of returning: it faulted`);
+    }
+
+    /**
+     * Undo the interrupt masking.
+     *
+     * Worth being careful about: leaving PRIMASK set or C_MASKINTS asserted
+     * means the freshly written program runs with its interrupts dead, which
+     * looks like flashing succeeded and the firmware is broken.
+     */
+    async release() {
+        try {
+            await this.target.writeCoreRegister(CORE_REG.SPECIAL, 0);
+        } catch (error) {
+            // Nothing to undo if it was never accepted.
+        }
+        const state = (await this.target.readMem32(REG.DHCSR)) >>> 0;
+        await this.target.writeMem32(
+            REG.DHCSR,
+            DBGKEY | DHCSR.C_DEBUGEN | (state & DHCSR.S_HALT ? DHCSR.C_HALT : 0));
     }
 
     /** Check a return code and turn a failure into a readable error. */
@@ -299,15 +370,21 @@ export class FlashProgrammer {
             await this.uninit(OPERATION.ERASE);
         }
 
-        await this.init(address, OPERATION.PROGRAM);
-        const pages = Math.ceil(data.length / pageSize);
-        for (let i = 0; i < pages; i++) {
-            const offset = i * pageSize;
-            await this.programPage(
-                address + offset, data.subarray(offset, offset + pageSize));
-            onProgress({ phase: 'program', done: i + 1, total: pages });
+        try {
+            await this.init(address, OPERATION.PROGRAM);
+            const pages = Math.ceil(data.length / pageSize);
+            for (let i = 0; i < pages; i++) {
+                const offset = i * pageSize;
+                await this.programPage(
+                    address + offset, data.subarray(offset, offset + pageSize));
+                onProgress({ phase: 'program', done: i + 1, total: pages });
+            }
+            await this.uninit(OPERATION.PROGRAM);
+        } finally {
+            // Whether or not it worked, the chip must not be left with its
+            // interrupts masked.
+            await this.release().catch(() => {});
         }
-        await this.uninit(OPERATION.PROGRAM);
     }
 
     /**

@@ -55,6 +55,19 @@ export const CORE_REG = {
     R0: 0, R1: 1, R2: 2, R3: 3, R4: 4, R5: 5, R6: 6, R7: 7,
     R8: 8, R9: 9, R10: 10, R11: 11, R12: 12,
     SP: 13, LR: 14, PC: 15, xPSR: 16,
+    MSP: 17, PSP: 18,
+    // One register number covers four byte-wide ones, packed low to high:
+    // PRIMASK, BASEPRI, FAULTMASK, CONTROL. Writing 1 sets PRIMASK and
+    // clears the rest, which is privileged mode on the main stack.
+    SPECIAL: 20,
+};
+
+/** Fields inside CORE_REG.SPECIAL. */
+export const SPECIAL = {
+    PRIMASK:   0x00000001,
+    BASEPRI:   0x0000ff00,
+    FAULTMASK: 0x00010000,
+    CONTROL:   0x01000000,
 };
 
 /** Known Cortex-M part numbers, from the CPUID register. */

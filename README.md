@@ -150,7 +150,7 @@ from `localhost`.
 | `selectAlgorithm(archive, {device})` | Pick the algorithm a chip declares |
 | `parseDescriptor(xml)` | Devices, memories and algorithms from a `.pdsc` |
 
-## Two things worth knowing
+## Three things worth knowing
 
 **A failed transfer leaves the DAP stuck.** Reading an unmapped address returns
 a `FAULT`, and from then on *every* access fails until the error is cleared
@@ -160,6 +160,15 @@ reloading the page. `readSafe()` handles it for you.
 **Addresses from generic OpenOCD configs are not always right.** On the Renesas
 RA4M1, `0x1ffe0000` appears as the work area and faults; usable RAM starts at
 `0x20000000`. `probeMemory()` exists to find out rather than assume.
+
+**Interrupts will eat your flash algorithm.** The board is running its own
+program, with its vector table in flash and its timers live. Resume the core to
+run `EraseSector` and an interrupt fires immediately, the core jumps into the
+application's handler and never comes back to the breakpoint you set as the
+return address. The algorithm appears to hang and the flash is never touched —
+on a real RA4M1 the core ended up at `0x0000e4e6`, deep inside the sketch.
+`FlashProgrammer` sets `PRIMASK` and `C_MASKINTS` before every call, and clears
+them afterwards so the new firmware does not run with its interrupts dead.
 
 ## Getting a permission
 
