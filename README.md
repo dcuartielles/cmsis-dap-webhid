@@ -150,7 +150,7 @@ from `localhost`.
 | `selectAlgorithm(archive, {device})` | Pick the algorithm a chip declares |
 | `parseDescriptor(xml)` | Devices, memories and algorithms from a `.pdsc` |
 
-## Three things worth knowing
+## Things worth knowing
 
 **A failed transfer leaves the DAP stuck.** Reading an unmapped address returns
 a `FAULT`, and from then on *every* access fails until the error is cleared
@@ -169,6 +169,24 @@ return address. The algorithm appears to hang and the flash is never touched —
 on a real RA4M1 the core ended up at `0x0000e4e6`, deep inside the sketch.
 `FlashProgrammer` sets `PRIMASK` and `C_MASKINTS` before every call, and clears
 them afterwards so the new firmware does not run with its interrupts dead.
+
+**`Init` failing is about the chip, not about you.** Vendor algorithms inspect
+the part before doing anything and refuse if its clocks or power mode would
+make flash unwritable — and they report that as a bare `1`. On a Renesas RA4M1
+the check reads `OFS1` at `0x404` to learn the internal oscillator's frequency,
+and accepts only four encodings; an Arduino Uno R4 WiFi has `0x3000` in that
+field, which is none of them, so `Init` refuses before touching the flash.
+
+Resetting the target first is usually enough. When it is not, `prepare()` runs
+just before `Init`, with the target in hand, so you can set the chip up
+yourself:
+
+```js
+new FlashProgrammer(target, algorithm, {
+  ramAddress: ram.start,
+  prepare: async target => { /* switch clocks to something it accepts */ },
+});
+```
 
 ## Getting a permission
 

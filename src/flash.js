@@ -75,6 +75,8 @@ export class FlashProgrammer {
      * @param {number} options.ramSize     How much of it may be used
      * @param {number} [options.stackSize=1024]
      * @param {number} [options.bufferSize]  Defaults to one flash page
+     * @param {(target, flash) => Promise<void>} [options.prepare]
+     *   Called before Init, to put the chip in a state the algorithm accepts
      */
     constructor(target, algorithm, options = {}) {
         if (!options.ramAddress && options.ramAddress !== 0) {
@@ -273,9 +275,28 @@ export class FlashProgrammer {
     }
 
     async init(address = this.device.address, operation = OPERATION.PROGRAM) {
-        this._check('Init', await this.call(
+        // A chance to put the chip in a state the algorithm will accept, before
+        // it inspects anything. See the note on Init failures below.
+        if (this.options.prepare) await this.options.prepare(this.target, this);
+
+        const result = await this.call(
             'Init', [address, this.options.clock, operation],
-            this.device.eraseTimeout));
+            this.device.eraseTimeout);
+
+        if (result !== 0) {
+            // Init is where vendor algorithms inspect the chip, and they are
+            // strict. They rarely object to the arguments: what they reject is
+            // the state the chip is in — a clock source or speed that makes
+            // flash unwritable, a low-power mode, a part locked or protected.
+            // Saying so beats a bare error code, because the fix is never in
+            // this library.
+            throw new Error(
+                `Init failed with code 0x${result.toString(16)}. The algorithm ` +
+                `rejected the chip's current state, not the request: the usual ` +
+                `causes are a clock configuration it does not recognise or a ` +
+                `low-power mode. Resetting the target first often fixes it; ` +
+                `otherwise pass a prepare() hook to set the clocks up.`);
+        }
     }
 
     async uninit(operation = OPERATION.PROGRAM) {

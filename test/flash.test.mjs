@@ -297,6 +297,24 @@ test('the chip is not left with its interrupts masked', async () => {
         'the final DHCSR write must drop the interrupt mask');
 });
 
+test('prepare runs before Init, and Init failures explain themselves', async () => {
+    const { flash, target } = programmer();
+    const order = [];
+    flash.options.prepare = async () => { order.push('prepare'); };
+
+    const realCall = flash.call.bind(flash);
+    flash.call = async (name, ...rest) => { order.push(name); return realCall(name, ...rest); };
+
+    await flash.init(0, 1);
+    assert.deepEqual(order, ['prepare', 'Init'],
+        'the chip must be set up before the algorithm inspects it');
+
+    // A non-zero Init means the chip's state was rejected, not the arguments.
+    flash.call = async () => 1;
+    await assert.rejects(() => flash.init(0, 1),
+        /rejected the chip's current state/);
+});
+
 test('program erases every sector it is about to write', async () => {
     const { flash, target } = programmer();
     const phases = [];
