@@ -5,6 +5,11 @@ Use **CMSIS-DAP** debug probes from a web page, over **WebHID**.
 Halt a running ARM Cortex-M, single-step it, read its registers and dump its
 memory — from a browser tab, with no toolchain and no drivers installed.
 
+**Try it right now, nothing to install:**
+[**debugger**](https://dcuartielles.github.io/cmsis-dap-webhid/examples/debugger/)
+· [**flasher**](https://dcuartielles.github.io/cmsis-dap-webhid/examples/flasher/)
+— Chrome or Edge, with a CMSIS-DAP board plugged in.
+
 ![How the pieces connect](docs/architecture.svg)
 
 ## What it's for
@@ -200,20 +205,19 @@ Two things the `.FLM` does not tell you, because they are not in it: **where
 the chip's RAM is**, which you pass as `ramAddress`, and **what to write**,
 which must be a raw `.bin` rather than a `.hex` or `.elf`.
 
-## Example
+## Examples
 
-**Try it now: <https://dcuartielles.github.io/cmsis-dap-webhid/examples/debugger/>**
+Both are self-contained pages, served from this repository. Nothing is
+uploaded anywhere: they talk to the probe from your own machine.
 
-Open it in Chrome with a CMSIS-DAP board plugged in, click *Connect probe* and
-pick your device. Nothing is installed and nothing is uploaded: the page talks
-to the probe directly from your machine.
+| | |
+|---|---|
+| [**debugger**](https://dcuartielles.github.io/cmsis-dap-webhid/examples/debugger/) | Connect a probe, halt the core, step through instructions, dump memory |
+| [**flasher**](https://dcuartielles.github.io/cmsis-dap-webhid/examples/flasher/) | Feed it a `.FLM` and a `.bin`, and it writes one to the other |
 
-The source is `examples/debugger/`, a self-contained page: connect a probe,
-halt the core, step through instructions and dump memory. To run it locally,
-serve it over HTTPS or `localhost` — WebHID refuses to work otherwise.
-
-There is also a flasher, which takes a `.FLM` and a `.bin` and writes one to
-the other: <https://dcuartielles.github.io/cmsis-dap-webhid/examples/flasher/>
+Click *Connect probe* and pick your device; the browser asks once per site.
+The source is in `examples/`. To run them locally, serve over HTTPS or
+`localhost` — WebHID refuses to work otherwise.
 
 ## Author
 
