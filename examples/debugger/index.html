@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CMSIS-DAP debugger</title>
+<style>
+  :root { --bg:#faf9f7; --fg:#1c1b19; --dim:#6b6660; --line:#e2ded8;
+          --card:#fff; --accent:#1f6f4a; --error:#a33; --warn:#8a5a00; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#16181a; --fg:#e8e6e3; --dim:#9b9691; --line:#2c3034;
+      --card:#1e2124; --accent:#5cc08c; --error:#e88; --warn:#d4a04a; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:32px 16px; background:var(--bg); color:var(--fg);
+         font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:780px; margin:0 auto; }
+  h1 { font-size:1.6rem; margin:0 0 4px; letter-spacing:-.01em; }
+  .sub { color:var(--dim); margin:0 0 24px; }
+  .card { background:var(--card); border:1px solid var(--line);
+          border-radius:10px; padding:18px; margin:14px 0; }
+  button { padding:9px 18px; border-radius:7px; border:1px solid var(--accent);
+           background:none; color:var(--accent); font:inherit; font-size:.95rem;
+           cursor:pointer; margin:0 8px 8px 0; }
+  button:hover:not(:disabled) { background:var(--accent); color:var(--bg); }
+  button:disabled { opacity:.45; cursor:default; }
+  pre { margin:10px 0 0; white-space:pre-wrap; word-break:break-word;
+        font-size:.85rem; font-family:ui-monospace,Consolas,monospace; }
+  .ok { color:var(--accent); } .err { color:var(--error); }
+  .label { font-size:.78rem; text-transform:uppercase; letter-spacing:.04em;
+           color:var(--dim); font-weight:600; }
+  .note { border-left:3px solid var(--warn); padding:10px 14px; margin:14px 0;
+          background:color-mix(in srgb,var(--warn) 8%,transparent);
+          border-radius:0 7px 7px 0; }
+  code { background:color-mix(in srgb,var(--fg) 7%,transparent);
+         padding:1px 5px; border-radius:4px; font-size:.87em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>CMSIS-DAP debugger</h1>
+  <p class="sub">Halt, step and inspect an ARM Cortex-M from the browser.</p>
+
+  <div class="note" id="support" hidden></div>
+
+  <div class="card">
+    <div class="label">1 &middot; probe</div>
+    <p style="margin:6px 0 12px">Grant access once. The board can be running its
+    program: CMSIS-DAP does not need a bootloader.</p>
+    <button id="connect">Connect probe</button>
+    <button id="any">Show all HID devices</button>
+    <pre id="probe"></pre>
+  </div>
+
+  <div class="card">
+    <div class="label">2 &middot; core</div>
+    <button id="halt" disabled>Halt</button>
+    <button id="resume" disabled>Resume</button>
+    <button id="step" disabled>Step</button>
+    <button id="trace" disabled>Trace 10</button>
+    <button id="regs" disabled>Registers</button>
+    <pre id="core"></pre>
+  </div>
+
+  <div class="card">
+    <div class="label">3 &middot; memory</div>
+    <p style="margin:6px 0 12px">Address in hex, e.g. <code>0x20000000</code>.</p>
+    <input id="addr" value="0x00000000" style="padding:7px 10px;border-radius:7px;
+      border:1px solid var(--line);background:var(--bg);color:var(--fg);
+      font-family:ui-monospace,Consolas,monospace;width:11em">
+    <button id="dump" disabled>Dump</button>
+    <pre id="mem"></pre>
+  </div>
+</main>
+
+<script type="module">
+import { CortexM } from 'https://esm.sh/dapjs@2.3.0';
+import {
+  requestTransport, getTransports, KNOWN_PROBES,
+  identify, registers, state, step as stepOnce, trace as traceCore,
+  clearError, hex,
+} from '../../src/index.js';
+
+const $ = id => document.getElementById(id);
+const show = (id, text, cls) => { $(id).textContent = text; $(id).className = cls || ''; };
+const NL = String.fromCharCode(10);
+
+let transport = null, target = null;
+const coreButtons = ['halt', 'resume', 'step', 'trace', 'regs', 'dump'];
+
+if (!('hid' in navigator)) {
+  $('support').hidden = false;
+  $('support').innerHTML = '<strong>This browser does not support WebHID.</strong><br>' +
+    'Chrome or Edge are required; Firefox and Safari do not implement it.';
+  $('connect').disabled = true;
+  $('any').disabled = true;
+}
+
+async function attach(t) {
+  transport = t;
+  target = new CortexM(transport);
+  await target.connect();
+
+  const id = await identify(target);
+  const info = await state(target);
+  show('probe', [
+    'device: ' + transport.device.productName,
+    'id:     ' + hex(transport.device.vendorId, 4) + ':' + hex(transport.device.productId, 4),
+    'core:   ' + id.core + '  (CPUID ' + hex(id.cpuid) + ')',
+    'state:  ' + (info.halted ? 'halted' : 'running'),
+  ].join(NL), 'ok');
+
+  coreButtons.forEach(b => { $(b).disabled = false; });
+  window.target = target;
+}
+
+$('connect').onclick = async () => {
+  try {
+    show('probe', 'Waiting for a device...');
+    await attach(await requestTransport());
+  } catch (e) { show('probe', 'Error: ' + e.message, 'err'); console.error(e); }
+};
+
+$('any').onclick = async () => {
+  try {
+    show('probe', 'Waiting for a device...');
+    await attach(await requestTransport({ filters: [] }));
+  } catch (e) { show('probe', 'Error: ' + e.message, 'err'); console.error(e); }
+};
+
+// A FAULT leaves the DAP stuck until cleared: handle it in one place.
+async function guarded(out, fn) {
+  try { return await fn(); }
+  catch (e) {
+    console.error(e);
+    if (/FAULT/i.test(e.message) && target) {
+      try { await clearError(target); } catch (x) { /* nothing to do */ }
+      show(out, 'Unmapped address. The link has been recovered.', 'err');
+    } else {
+      show(out, 'Error: ' + e.message, 'err');
+    }
+  }
+}
+
+$('halt').onclick = () => guarded('core', async () => {
+  await target.halt();
+  const r = await registers(target);
+  show('core', 'halted' + NL +
+    'PC ' + hex(r.PC) + '   SP ' + hex(r.SP) + '   LR ' + hex(r.LR), 'ok');
+});
+
+$('resume').onclick = () => guarded('core', async () => {
+  await target.resume();
+  show('core', 'running', 'ok');
+});
+
+$('step').onclick = () => guarded('core', async () => {
+  if (!(await target.isHalted())) await target.halt();
+  const before = await target.readCoreRegister(15);
+  const stopped = await stepOnce(target);
+  const after = await target.readCoreRegister(15);
+  show('core', hex(before) + '  ->  ' + hex(after) +
+    (stopped ? '' : NL + '(did not halt again: it may be waiting on something)'), 'ok');
+});
+
+$('trace').onclick = () => guarded('core', async () => {
+  if (!(await target.isHalted())) await target.halt();
+  const path = await traceCore(target, 10);
+  show('core', path.map(v => hex(v)).join(NL), 'ok');
+});
+
+$('regs').onclick = () => guarded('core', async () => {
+  if (!(await target.isHalted())) await target.halt();
+  const r = await registers(target);
+  show('core', Object.keys(r).map(n => n.padEnd(5) + ' ' + hex(r[n])).join(NL), 'ok');
+});
+
+$('dump').onclick = () => guarded('mem', async () => {
+  if (!(await target.isHalted())) await target.halt();
+  const base = parseInt($('addr').value, 16);
+  if (!Number.isFinite(base)) return show('mem', 'Address is not valid hex.', 'err');
+  const words = await target.readBlock(base, 16);
+  const rows = [];
+  for (let i = 0; i < words.length; i += 4) {
+    rows.push(hex(base + i * 4) + '  ' +
+      Array.from(words.slice(i, i + 4)).map(v => hex(v)).join(' '));
+  }
+  show('mem', rows.join(NL), 'ok');
+});
+
+// Reattach silently if the page already has permission.
+getTransports().then(async list => {
+  if (!list.length) return;
+  try { await list[0].open(); await attach(list[0]); } catch (e) { /* ask the user */ }
+});
+</script>
+</body>
+</html>

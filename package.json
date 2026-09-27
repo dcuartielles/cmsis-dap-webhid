@@ -1,0 +1,29 @@
+{
+  "name": "cmsis-dap-webhid",
+  "version": "0.1.0",
+  "description": "WebHID transport for dapjs plus Cortex-M debug helpers: use CMSIS-DAP probes from the browser",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./transport": "./src/transport.js",
+    "./debug": "./src/debug.js"
+  },
+  "files": ["src", "README.md", "LICENSE"],
+  "keywords": [
+    "cmsis-dap", "webhid", "dapjs", "swd", "cortex-m", "arm",
+    "debugger", "embedded", "microcontroller", "browser"
+  ],
+  "peerDependencies": {
+    "dapjs": "^2.3.0"
+  },
+  "peerDependenciesMeta": {
+    "dapjs": { "optional": true }
+  },
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/USUARIO/cmsis-dap-webhid.git" },
+  "bugs": { "url": "https://github.com/USUARIO/cmsis-dap-webhid/issues" },
+  "homepage": "https://github.com/USUARIO/cmsis-dap-webhid#readme",
+  "engines": { "node": ">=18" },
+  "sideEffects": false
+}
