@@ -153,6 +153,16 @@ from `localhost`.
 | `selectAlgorithm(archive, {device})` | Pick the algorithm a chip declares |
 | `parseDescriptor(xml)` | Devices, memories and algorithms from a `.pdsc` |
 
+## Field notes
+
+Everything that went wrong getting this to work, with the error text you
+actually see: **[docs/field-notes.md](docs/field-notes.md)**.
+
+Written for anyone hitting the same walls — the transport that desynchronises
+after one lost reply, the flash algorithm that vanishes into an interrupt, the
+image that writes and verifies perfectly at the wrong address. None of it was
+documented anywhere; all of it was found with a board on the desk.
+
 ## Things worth knowing
 
 **A failed transfer leaves the DAP stuck.** Reading an unmapped address returns
